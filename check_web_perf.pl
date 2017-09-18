@@ -1,39 +1,46 @@
 #!/usr/bin/perl -w
 
+# define respons codes and texts for nagios
+
 my %ERRORS=( OK => 0, WARNING => 1, CRITICAL => 2, UNKNOWN => 3 );
 my %ERRORCODES=( 0 => 'OK', 1 => 'WARNING', 2 => 'CRITICAL', 3 => 'UNKNOWN' );
 
-#use strict;
 use Getopt::Long;
 use Getopt::Long  qw(:config bundling);
 use Scalar::Util 'looks_like_number';
-#use vars qw($opt_V $opt_h $opt_F $opt_t $verbose $PROGNAME);
+use File::Basename;
 
 my $RETCODE;
 my $proto;
 my $port;
 my $Version="0.1";
+my $arg0 = basename($0);
 
-
+#
+# define subroutines, defined later in code to awoid warnings
+#
 
 sub return_result;
 sub print_help();
 sub print_version();
 sub print_usage();
 
+
 # check for curl command and exit if not exist
 my $CMD_curl=`whereis curl`;
-  (my $dummy, $CMD_curl) = split(/ /,$CMD_curl,2);
+#  (my $dummy, $CMD_curl) = split(/ /,$CMD_curl,2);
   chop($CMD_curl);
 
+# define options used with curl
 my $curl_opts  = "-H \"Pragma: no-cache\" -o /dev/null -i -s ";
    $curl_opts .= "-w %{time_connect}:%{time_starttransfer}:%{time_total}:%{time_namelookup}:%{time_appconnect}:%{time_pretransfer}:%{time_redirect}";
 
+# exit if curl not found
 if ($CMD_curl eq "") {
   return_result($ERRORS{UNKNOWN},"Command curl is missing in search path") ;
 } 
 
-#Getopt::Long::Configure(`bundling`);
+# define options available for command
 GetOptions( 	"h" => \$opt_h,		"help" => \$opt_h,
 		"V" => \$opt_V, 	"version" => \$opt_V,
 		"H=s" => \$opt_H, 	"hostname=s" => \$opt_H,
@@ -50,7 +57,7 @@ if ($opt_h) { print_help(); exit 0; }
 # -V mean display version
 if ($opt_V) { print_version(); exit 0; }
 
-# -H means hostname and must be defined
+# -H means hostname and must be defined, exit if not
 $opt_H = shift unless ($opt_H);
 unless ($opt_H) { print_usage(); exit -1; }
 
@@ -68,7 +75,7 @@ if (defined $opt_p && $opt_p ne "" ) {
   $port=$opt_p ;
 }
 
-# check if -u is used, return / if not
+# check if -u is used, return / if not defined
 my $url=$opt_u || "/" ;
 
 for ($url) {
@@ -93,11 +100,13 @@ if ( ! looks_like_number($opt_c) ) {
   }
 }
 
-#time_appconnect}:%{time_pretransfer}:%{time_redirect
-print "cmd=$CMD_curl $curl_opts $proto$opt_H:$port$url\n" ;
+# run command and get response
 $ret=`$CMD_curl $curl_opts $proto$opt_H:$port`;
+
+# convert return string to variables
 (my $time_connect, my $time_start_xfr, my $time_total, my $time_dns, my $time_appconnect, my $time_prexfs, my $time_redirect )=split(/:/,$ret,7);
 
+# construct data part of return message
 $data='' ;
 
 $data .= "'Total time=$time_total"."s " ;
@@ -108,14 +117,16 @@ $data .= "'time ssl connect'=$time_appconnect"."s ";
 $data .= "'time neg. finished'=$time_prexfs"."s ";
 $data .= "'time redirect'=$time_redirect"."s ";
 
+# assume OK
 my $status=$ERRORS{OK} ;
 
-# make sure it's numeric
 
+# make sure it's numeric
 my $tt = eval $time_total ;
 
 # check if warning is defined
 if ( defined $opt_w ) {
+  # convert to numeric
   my $tw = eval $opt_w ;
   if ( $tt >= $tw ) {
     $status=$ERRORS{WARNING} ;
@@ -124,19 +135,15 @@ if ( defined $opt_w ) {
 
 # check if critial is defined
 if ( defined $opt_c ) {
+  # convert to numeric
   my $tc = eval $opt_c ;
   if ( $tt >= $tc ) {
     $status=$ERRORS{CRITICAL} ;
   }
 }
 
-
+# return message to nagios
 return_result($status,"Total time $time_total",$data) ;
-
-#use lib "/opt/plugins";
- print_usage();
- return_result($ERRORS{UNKNOWN},"missing arguments");
-
 
 
 #
@@ -163,12 +170,17 @@ sub return_result {
 
 }
  
+#
+# print command version
+#
 
 sub print_version() {
-  	my $arg0 =  $0;
-	chomp $arg0;
 	print "$arg0                        version $Version\n";
 }
+
+#
+# print help for command
+#
 
 sub print_help() {
 	print_version();
@@ -189,8 +201,12 @@ sub print_help() {
         print "   The maximum respons time in seconds before command return critical state\n";
 }
 
+#
+# print command usage
+#
+
 sub print_usage() {
-	print "check_web_pref -H host [-S] [-p port] [-u uri]\n";
+	print "$arg0 -H host [-S] [-p port] [-u uri]\n";
 	print " [-h | --help]\n";
 	print " [-V | --version]\n";
 } 
